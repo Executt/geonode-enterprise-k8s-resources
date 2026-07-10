@@ -1,6 +1,6 @@
 # ========================================================================
 # VALORES DE PRODUÇÃO - GEONODE ENTERPRISE (OPENSHIFT / DEVSECOPS)
-# Arquitetura Cloud-Native com AWS RDS, S3, Analytics e IAM (SSO/LDAP)
+# Arquitetura Cloud-Native com AWS (RDS/S3), Analytics e Integração Multicloud
 # ========================================================================
 
 global:
@@ -8,7 +8,7 @@ global:
     - name: quay-pull-secret
 
 # ------------------------------------------------------------------------
-# 1. CORE WEB & CATÁLOGO (Django / MapStore / IAM)
+# 1. CORE WEB & CATÁLOGO (Django / MapStore / IAM / CORS)
 # ------------------------------------------------------------------------
 django:
   replicaCount: 3
@@ -74,14 +74,23 @@ django:
       value: "redis://geonode-redis-master:6379/0"
 
     # ====================================================================
+    # INTEGRAÇÃO MULTICLOUD (DATABRICKS AZURE/AWS E JUPYTERHUB)
+    # Permite que os notebooks de Data Science consumam a API REST do GeoNode
+    # ====================================================================
+    - name: CORS_ALLOW_ALL_ORIGINS
+      value: "False" # Mantém a segurança bloqueando domínios desconhecidos
+    - name: CORS_ALLOWED_ORIGINS
+      # Lista rigorosa de origens permitidas (Azure Databricks, JupyterHub ANA e AWS Databricks)
+      value: "https://jupyter.ana.gov.br,https://adb-3109412849216067.7.azuredatabricks.net,https://databricks-instance.cloud.databricks.com"
+    - name: ALLOWED_HOSTS
+      value: "geonode.ana.gov.br,jupyter.ana.gov.br,adb-3109412849216067.7.azuredatabricks.net"
+
+    # ====================================================================
     # GESTÃO DE IDENTIDADE E ACESSO (IAM)
-    # Instrução: Descomente apenas O BLOCO A ou O BLOCO B conforme a
-    # diretriz de rede corporativa vigente.
     # ====================================================================
 
     # --------------------------------------------------------------------
     # OPÇÃO A: Integração LDAP / Active Directory (On-Premise)
-    # Ideal se a autenticação primária for o servidor AD interno da rede.
     # --------------------------------------------------------------------
     # - name: LDAP_ENABLED
     #   value: "True"
@@ -103,13 +112,12 @@ django:
     
     # --------------------------------------------------------------------
     # OPÇÃO B: Integração OIDC / SAML 2.0 (Cloud-Native SSO)
-    # Ideal para Microsoft Entra ID (Azure AD), Keycloak ou Gov.br.
-    # Esta é a opção recomendada para arquiteturas Zero Trust.
+    # Recomendado para Azure AD, permitindo também que o GeoNode atue
+    # como provedor de identidade para o JupyterHub.
     # --------------------------------------------------------------------
     - name: OAUTH2_PROVIDER_APPLICATION_MODEL
       value: "oauth2_provider.Application"
     - name: SOCIALACCOUNT_PROVIDERS
-      # Exemplo formatado para Azure AD (Ajustar o tenant e chaves no Secret em Produção)
       value: '{"openid_connect": {"APPS": [{"client_id": "geonode-oidc-client", "secret": "INJETAR_VIA_SECRET", "settings": {"server_url": "https://login.microsoftonline.com/tenant-id-da-agencia/v2.0"}}]}}'
 
 # ------------------------------------------------------------------------
