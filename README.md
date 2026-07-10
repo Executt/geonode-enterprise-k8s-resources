@@ -15,6 +15,7 @@ Para entender profundamente o funcionamento da plataforma, consulte os documento
 5. [Visão de Negócios e Projetos Estratégicos](docs/negocios_operacao.md)
 6. [Mapeamento de Componentes](docs/mapeamento_componentes.md)
 7. [Ajustes na Camada de Banco de Dados (AWS RDS)](docs/camada_banco_dados_rds.md)
+8. [Diretrizes Estratégicas e Decisões Arquiteturais (ADR)](docs/diretrizes_arquitetura.md)
    
 
 ## 🚀 Como fazer o Deploy (GitOps / ArgoCD)
