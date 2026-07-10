@@ -1,0 +1,140 @@
+# ========================================================================
+# VALORES DE PRODUÇÃO - GEONODE ENTERPRISE OPENSHIFT
+# ========================================================================
+
+global:
+  # Secret criado no OpenShift para permitir o download de imagens do Red Hat Quay
+  imagePullSecrets:
+    - name: quay-pull-secret
+
+# ------------------------------------------------------------------------
+# 1. Configurações do Portal (Django / Front-end / Catálogo)
+# ------------------------------------------------------------------------
+django:
+  replicaCount: 3 # Alta disponibilidade na API
+  image:
+    repository: quay.io/ana-gov/geonode-django
+    tag: "latest-commit-hash" # Substituído pelo GitLab CI
+    pullPolicy: Always
+
+  # Segurança rigorosa para o OpenShift SCC
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 1001
+    fsGroup: 1001
+
+  resources:
+    requests:
+      cpu: "500m"
+      memory: "1Gi"
+    limits:
+      cpu: "1000m"
+      memory: "2Gi"
+
+  env:
+    # --- Banco de Dados (Apontando para AWS RDS Externo) ---
+    - name: DATABASE_URL
+      valueFrom:
+        secretKeyRef:
+          name: aws-rds-credentials
+          key: django_db_url
+    - name: GEODATABASE_URL
+      valueFrom:
+        secretKeyRef:
+          name: aws-rds-credentials
+          key: postgis_db_url
+
+    # --- Storage de Arquivos (Apontando para AWS S3) ---
+    - name: DEFAULT_FILE_STORAGE
+      value: "storages.backends.s3boto3.S3Boto3Storage"
+    - name: STATICFILES_STORAGE
+      value: "storages.backends.s3boto3.S3Boto3Storage"
+    - name: AWS_STORAGE_BUCKET_NAME
+      value: "ana-geonode-prod-bucket"
+    - name: AWS_S3_REGION_NAME
+      value: "sa-east-1"
+    
+    # As chaves da AWS podem ser omitidas se os nós AWS EKS/ROSA usarem IAM Roles (IRSA)
+    # Mas se usar Access Keys, elas devem vir de Secrets
+    - name: AWS_ACCESS_KEY_ID
+      valueFrom:
+        secretKeyRef:
+          name: aws-s3-credentials
+          key: access_key
+    - name: AWS_SECRET_ACCESS_KEY
+      valueFrom:
+        secretKeyRef:
+          name: aws-s3-credentials
+          key: secret_key
+
+    # --- Fila e Cache Interno ---
+    - name: CELERY_BROKER_URL
+      value: "redis://geonode-redis-master:6379/0"
+
+# ------------------------------------------------------------------------
+# 2. Configurações do Servidor de Mapas (GeoServer / OGC)
+# ------------------------------------------------------------------------
+geoserver:
+  replicaCount: 2 # Clustered GeoServer
+  image:
+    repository: quay.io/ana-gov/geonode-geoserver
+    tag: "latest-commit-hash"
+    pullPolicy: Always
+
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 1001
+
+  resources:
+    requests:
+      cpu: "1000m"
+      memory: "2Gi" # Requer mais memória para o Heap do Java (Renderização WMS)
+    limits:
+      cpu: "2000m"
+      memory: "4Gi"
+
+  env:
+    # Ativa o uso do AWS RDS em vez de arquivos XML no disco do K8s
+    - name: GEOSERVER_JDBC_CONFIG
+      value: "true"
+    - name: GEOSERVER_DATA_DIR
+      value: "/opt/geoserver_data"
+    # Memória Java otimizada
+    - name: INITIAL_MEMORY
+      value: "2G"
+    - name: MAXIMUM_MEMORY
+      value: "4G"
+
+  # Aqui mapeamos o ConfigMap gerado pelo Kustomize (na pasta /base)
+  volumeMounts:
+    - name: jdbc-config-volume
+      mountPath: /opt/geoserver_data/jdbcconfig/jdbcconfig.properties
+      subPath: jdbcconfig.properties
+  
+  volumes:
+    - name: jdbc-config-volume
+      configMap:
+        name: geoserver-jdbc-configmap
+
+# ------------------------------------------------------------------------
+# 3. Configurações do Broker (Redis)
+# ------------------------------------------------------------------------
+redis:
+  enabled: true
+  replicaCount: 1
+  image:
+    repository: redis
+    tag: 7.0-alpine
+  securityContext:
+    runAsUser: 1001
+
+# ------------------------------------------------------------------------
+# 4. Exposição da Aplicação (OpenShift Route)
+# ------------------------------------------------------------------------
+route:
+  enabled: true
+  host: "geonode.ana.gov.br"
+  # O OpenShift fará a terminação SSL no Edge com o certificado corporativo
+  tls:
+    termination: edge
+    insecureEdgeTerminationPolicy: Redirect
