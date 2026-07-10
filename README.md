@@ -18,6 +18,7 @@ Para entender profundamente o funcionamento da plataforma, consulte os documento
 8. [Diretrizes Estratégicas e Decisões Arquiteturais (ADR)](docs/diretrizes_arquitetura.md)
 9. [Guia de Transição de Serviços de Mapas](docs/guiia_de_servicos_de_mapas.md)
 10. [Guia de Api´s e Integrações.md](docs/apis_e_integracoes.md)
+11. [Fluxo da Arquitetura da Solução Geoespacial](fluxo.md)
    
 
 ## 🚀 Como fazer o Deploy (GitOps / ArgoCD)
