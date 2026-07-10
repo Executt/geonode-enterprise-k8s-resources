@@ -1,23 +1,24 @@
 # ========================================================================
-# VALORES DE PRODUÇÃO - GEONODE ENTERPRISE OPENSHIFT
+# VALORES DE PRODUÇÃO - GEONODE ENTERPRISE (OPENSHIFT / DEVSECOPS)
+# Arquitetura Cloud-Native com AWS RDS, S3 e Camada de Analytics
 # ========================================================================
 
 global:
-  # Secret criado no OpenShift para permitir o download de imagens do Red Hat Quay
+  # Secret injetado no OpenShift para permitir o download seguro do Red Hat Quay
   imagePullSecrets:
     - name: quay-pull-secret
 
 # ------------------------------------------------------------------------
-# 1. Configurações do Portal (Django / Front-end / Catálogo)
+# 1. CORE WEB & CATÁLOGO (Django / MapStore)
 # ------------------------------------------------------------------------
 django:
-  replicaCount: 3 # Alta disponibilidade na API
+  replicaCount: 3 # Alta disponibilidade na rede corporativa
   image:
     repository: quay.io/ana-gov/geonode-django
-    tag: "latest-commit-hash" # Substituído pelo GitLab CI
+    tag: "latest-commit-hash" # Substituído automaticamente pelo GitLab CI (pós-scan do RHACS)
     pullPolicy: Always
 
-  # Segurança rigorosa para o OpenShift SCC
+  # Segurança restrita para o OpenShift SCC
   securityContext:
     runAsNonRoot: true
     runAsUser: 1001
@@ -32,7 +33,7 @@ django:
       memory: "2Gi"
 
   env:
-    # --- Banco de Dados (Apontando para AWS RDS Externo) ---
+    # --- Banco de Dados Geográfico (AWS RDS Externo) ---
     - name: DATABASE_URL
       valueFrom:
         secretKeyRef:
@@ -44,7 +45,7 @@ django:
           name: aws-rds-credentials
           key: postgis_db_url
 
-    # --- Storage de Arquivos (Apontando para AWS S3) ---
+    # --- Storage Desacoplado (AWS S3) ---
     - name: DEFAULT_FILE_STORAGE
       value: "storages.backends.s3boto3.S3Boto3Storage"
     - name: STATICFILES_STORAGE
@@ -53,9 +54,7 @@ django:
       value: "ana-geonode-prod-bucket"
     - name: AWS_S3_REGION_NAME
       value: "sa-east-1"
-    
-    # As chaves da AWS podem ser omitidas se os nós AWS EKS/ROSA usarem IAM Roles (IRSA)
-    # Mas se usar Access Keys, elas devem vir de Secrets
+    # Autenticação via IAM Roles (IRSA) preferencial. Se não, usar chaves abaixo via Secret:
     - name: AWS_ACCESS_KEY_ID
       valueFrom:
         secretKeyRef:
@@ -67,15 +66,23 @@ django:
           name: aws-s3-credentials
           key: secret_key
 
-    # --- Fila e Cache Interno ---
+    # --- NOVA CAMADA DE APLICAÇÃO (Substitui ArcGIS Apps) ---
+    # Força a interface moderna em React (MapStore)
+    - name: GEONODE_CLIENT_LAYER_PREVIEW_LIBRARY
+      value: "mapstore"
+    # Habilita a criação de Dashboards e GeoStories (Substitui StoryMaps)
+    - name: ENABLE_MAPSTORE_APPS
+      value: "true"
+
+    # --- Fila Assíncrona ---
     - name: CELERY_BROKER_URL
       value: "redis://geonode-redis-master:6379/0"
 
 # ------------------------------------------------------------------------
-# 2. Configurações do Servidor de Mapas (GeoServer / OGC)
+# 2. MOTOR DE MAPAS OGC (GeoServer)
 # ------------------------------------------------------------------------
 geoserver:
-  replicaCount: 2 # Clustered GeoServer
+  replicaCount: 2
   image:
     repository: quay.io/ana-gov/geonode-geoserver
     tag: "latest-commit-hash"
@@ -88,24 +95,23 @@ geoserver:
   resources:
     requests:
       cpu: "1000m"
-      memory: "2Gi" # Requer mais memória para o Heap do Java (Renderização WMS)
+      memory: "2Gi"
     limits:
       cpu: "2000m"
       memory: "4Gi"
 
   env:
-    # Ativa o uso do AWS RDS em vez de arquivos XML no disco do K8s
+    # Externaliza a configuração (Workspaces/SLDs) para o RDS via JDBC
     - name: GEOSERVER_JDBC_CONFIG
       value: "true"
     - name: GEOSERVER_DATA_DIR
       value: "/opt/geoserver_data"
-    # Memória Java otimizada
+    # Tuning de JVM para cargas massivas de WMS/WFS
     - name: INITIAL_MEMORY
       value: "2G"
     - name: MAXIMUM_MEMORY
       value: "4G"
 
-  # Aqui mapeamos o ConfigMap gerado pelo Kustomize (na pasta /base)
   volumeMounts:
     - name: jdbc-config-volume
       mountPath: /opt/geoserver_data/jdbcconfig/jdbcconfig.properties
@@ -117,7 +123,33 @@ geoserver:
         name: geoserver-jdbc-configmap
 
 # ------------------------------------------------------------------------
-# 3. Configurações do Broker (Redis)
+# 3. CAMADA DE BUSINESS INTELLIGENCE AVANÇADA (Apache Superset)
+# Substitui o ArcGIS Experience Builder para Big Data e FinOps
+# ------------------------------------------------------------------------
+superset:
+  enabled: true
+  replicaCount: 1
+  image:
+    repository: quay.io/ana-gov/apache-superset # Imagem customizada aprovada no RHACS
+    tag: "latest"
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 1001
+  env:
+    # Conecta o BI diretamente ao PostGIS do GeoNode para leitura
+    - name: SUPERSET_SQLALCHEMY_URI
+      valueFrom:
+        secretKeyRef:
+          name: aws-rds-credentials
+          key: postgis_db_url_read_only
+    # Permite embutir os dashboards do Superset via iFrame dentro do GeoNode
+    - name: SUPERSET_FEATURE_EMBEDDED_SUPERSET
+      value: "true"
+    - name: SUPERSET_WEBSERVER_ADDRESS
+      value: "0.0.0.0"
+
+# ------------------------------------------------------------------------
+# 4. CACHE E MENSAGERIA (Redis)
 # ------------------------------------------------------------------------
 redis:
   enabled: true
@@ -129,12 +161,16 @@ redis:
     runAsUser: 1001
 
 # ------------------------------------------------------------------------
-# 4. Exposição da Aplicação (OpenShift Route)
+# 5. ROTEAMENTO CORPORATIVO (OpenShift Routes)
 # ------------------------------------------------------------------------
 route:
   enabled: true
-  host: "geonode.ana.gov.br"
-  # O OpenShift fará a terminação SSL no Edge com o certificado corporativo
+  # Rota do catálogo e mapas
+  hostGeoNode: "geonode.ana.gov.br"
+  # Rota exclusiva para painéis de BI avançados
+  hostSuperset: "bi-espacial.ana.gov.br"
+  
   tls:
+    # O certificado SSL é resolvido na borda do cluster (Ingress Controller)
     termination: edge
     insecureEdgeTerminationPolicy: Redirect
