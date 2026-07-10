@@ -1,0 +1,39 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Release.Name }}-celery
+  labels:
+    app: geonode
+    component: celery
+spec:
+  replicas: 1 # Geralmente 1 ou 2 workers são suficientes
+  selector:
+    matchLabels:
+      app: geonode
+      component: celery
+  template:
+    metadata:
+      labels:
+        app: geonode
+        component: celery
+    spec:
+      serviceAccountName: geonode-sa
+      {{- if .Values.global.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml .Values.global.imagePullSecrets | nindent 8 }}
+      {{- end }}
+      securityContext:
+        {{- toYaml .Values.django.securityContext | nindent 8 }}
+      containers:
+        - name: celery
+          image: "{{ .Values.django.image.repository }}:{{ .Values.django.image.tag }}"
+          imagePullPolicy: {{ .Values.django.image.pullPolicy }}
+          # Sobrescreve o comando padrão da imagem para iniciar como Worker assíncrono
+          command: ["celery"]
+          args: ["-A", "geonode.celery_app:app", "worker", "-l", "info", "-Q", "default,cleanup,email,update,broadcast,geoserver", "-n", "worker1@%h"]
+          resources:
+            requests:
+              cpu: "250m"
+              memory: "512Mi"
+          env:
+            {{- toYaml .Values.django.env | nindent 12 }}
