@@ -1,0 +1,54 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Release.Name }}-geoserver
+  labels:
+    app: geonode
+    component: geoserver
+spec:
+  replicas: {{ .Values.geoserver.replicaCount }}
+  selector:
+    matchLabels:
+      app: geonode
+      component: geoserver
+  template:
+    metadata:
+      labels:
+        app: geonode
+        component: geoserver
+    spec:
+      serviceAccountName: geonode-sa
+      {{- if .Values.global.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml .Values.global.imagePullSecrets | nindent 8 }}
+      {{- end }}
+      securityContext:
+        {{- toYaml .Values.geoserver.securityContext | nindent 8 }}
+      containers:
+        - name: geoserver
+          image: "{{ .Values.geoserver.image.repository }}:{{ .Values.geoserver.image.tag }}"
+          imagePullPolicy: {{ .Values.geoserver.image.pullPolicy }}
+          ports:
+            - name: http
+              containerPort: 8080
+              protocol: TCP
+          resources:
+            {{- toYaml .Values.geoserver.resources | nindent 12 }}
+          env:
+            {{- toYaml .Values.geoserver.env | nindent 12 }}
+          volumeMounts:
+            {{- toYaml .Values.geoserver.volumeMounts | nindent 12 }}
+          livenessProbe:
+            httpGet:
+              path: /geoserver/web/
+              port: http
+            initialDelaySeconds: 60
+            periodSeconds: 20
+          readinessProbe:
+            httpGet:
+              path: /geoserver/ows?service=wms&version=1.3.0&request=GetCapabilities
+              port: http
+            initialDelaySeconds: 30
+            periodSeconds: 15
+      volumes:
+        {{- toYaml .Values.geoserver.volumes | nindent 8 }}
