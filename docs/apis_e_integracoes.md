@@ -11,7 +11,7 @@ A arquitetura Cloud-Native baseada no GeoNode e orquestrada no OpenShift adota u
 A modularização das APIs garante que a plataforma atue como o "coração" dos dados geoespaciais, viabilizando a transformação digital de processos sem engessar as ferramentas das áreas de negócio.
 
 * **Automação e Escalabilidade:** Em projetos como o Declara Água, algoritmos de visão computacional (processados no Azure Databricks) não precisam interagir com interfaces gráficas. Eles inserem telemetria massiva direto no banco via API.
-* **Gestão Financeira e Administrativa:** Sistemas como o FinOps-Gov ou Pacto-Gov podem consultar a API do GeoNode para extrair a volumetria de dados hospedados no AWS S3, cruzando esses dados com o *billing* da nuvem.
+* **Gestão Financeira e Administrativa:** Os nossos sistemas podem consultar a API do GeoNode para extrair a volumetria de dados hospedados no AWS S3, cruzando esses dados com o *billing* da nuvem.
 * **Democratização dos Dados:** Cientistas de dados utilizando o JupyterHub na rede interna consomem polígonos via APIs OGC de forma padronizada, sem depender de bibliotecas proprietárias da Esri.
 
 ---
