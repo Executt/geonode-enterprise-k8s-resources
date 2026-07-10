@@ -1,0 +1,60 @@
+{{- if .Values.route.enabled }}
+# Serviço interno para o Django
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ .Release.Name }}-django-svc
+spec:
+  ports:
+    - port: 80
+      targetPort: http
+  selector:
+    app: geonode
+    component: django
+---
+# Serviço interno para o GeoServer
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ .Release.Name }}-geoserver-svc
+spec:
+  ports:
+    - port: 80
+      targetPort: http
+  selector:
+    app: geonode
+    component: geoserver
+---
+# Rota Principal OpenShift com Terminação SSL
+apiVersion: route.openshift.io/v1
+kind: Route
+metadata:
+  name: {{ .Release.Name }}-main-route
+  labels:
+    app: geonode
+spec:
+  host: {{ .Values.route.host }}
+  to:
+    kind: Service
+    name: {{ .Release.Name }}-django-svc
+  tls:
+    termination: {{ .Values.route.tls.termination }}
+    insecureEdgeTerminationPolicy: {{ .Values.route.tls.insecureEdgeTerminationPolicy }}
+---
+# Rota para o tráfego do GeoServer (Serviços OGC / WMS / WFS)
+apiVersion: route.openshift.io/v1
+kind: Route
+metadata:
+  name: {{ .Release.Name }}-geoserver-route
+  labels:
+    app: geonode
+spec:
+  host: {{ .Values.route.host }}
+  path: /geoserver
+  to:
+    kind: Service
+    name: {{ .Release.Name }}-geoserver-svc
+  tls:
+    termination: {{ .Values.route.tls.termination }}
+    insecureEdgeTerminationPolicy: {{ .Values.route.tls.insecureEdgeTerminationPolicy }}
+{{- end }}
