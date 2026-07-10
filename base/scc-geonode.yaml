@@ -2,26 +2,31 @@ kind: SecurityContextConstraints
 apiVersion: security.openshift.io/v1
 metadata:
   name: geonode-enterprise-scc
+  annotations:
+    kubernetes.io/description: "Garante que os pods do GeoNode/GeoServer rodem com UID/GID 1001 fixo, sem privilégios de root."
 allowHostDirVolumePlugin: false
 allowHostIPC: false
 allowHostNetwork: false
 allowHostPID: false
 allowHostPorts: false
-allowPrivilegeEscalation: true
+allowPrivilegeEscalation: false
 allowPrivilegedContainer: false
 allowedCapabilities: []
 defaultAddCapabilities: []
+readOnlyRootFilesystem: false
+# Força as pastas a pertencerem ao grupo 1001
 fsGroup:
   type: MustRunAs
   ranges:
-    - min: 1000
-      max: 2000
-readOnlyRootFilesystem: false
+    - min: 1001
+      max: 1001
+# Força a execução como usuário 1001 (mesmo do Dockerfile)
 runAsUser:
   type: MustRunAsRange
-  uidRangeMin: 1000
-  uidRangeMax: 2000
+  uidRangeMin: 1001
+  uidRangeMax: 1001
 seLinuxContext:
   type: MustRunAs
+# Atrela esta regra apenas à ServiceAccount que o Helm do GeoNode vai usar
 users:
-  - system:serviceaccount:geonode-system:default
+  - system:serviceaccount:geonode-system:geonode-sa
