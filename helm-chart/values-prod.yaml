@@ -1,24 +1,22 @@
 # ========================================================================
 # VALORES DE PRODUÇÃO - GEONODE ENTERPRISE (OPENSHIFT / DEVSECOPS)
-# Arquitetura Cloud-Native com AWS RDS, S3 e Camada de Analytics
+# Arquitetura Cloud-Native com AWS RDS, S3, Analytics e IAM (SSO/LDAP)
 # ========================================================================
 
 global:
-  # Secret injetado no OpenShift para permitir o download seguro do Red Hat Quay
   imagePullSecrets:
     - name: quay-pull-secret
 
 # ------------------------------------------------------------------------
-# 1. CORE WEB & CATÁLOGO (Django / MapStore)
+# 1. CORE WEB & CATÁLOGO (Django / MapStore / IAM)
 # ------------------------------------------------------------------------
 django:
-  replicaCount: 3 # Alta disponibilidade na rede corporativa
+  replicaCount: 3
   image:
     repository: quay.io/ana-gov/geonode-django
-    tag: "latest-commit-hash" # Substituído automaticamente pelo GitLab CI (pós-scan do RHACS)
+    tag: "latest-commit-hash" 
     pullPolicy: Always
 
-  # Segurança restrita para o OpenShift SCC
   securityContext:
     runAsNonRoot: true
     runAsUser: 1001
@@ -54,7 +52,6 @@ django:
       value: "ana-geonode-prod-bucket"
     - name: AWS_S3_REGION_NAME
       value: "sa-east-1"
-    # Autenticação via IAM Roles (IRSA) preferencial. Se não, usar chaves abaixo via Secret:
     - name: AWS_ACCESS_KEY_ID
       valueFrom:
         secretKeyRef:
@@ -66,17 +63,54 @@ django:
           name: aws-s3-credentials
           key: secret_key
 
-    # --- NOVA CAMADA DE APLICAÇÃO (Substitui ArcGIS Apps) ---
-    # Força a interface moderna em React (MapStore)
+    # --- CAMADA DE APLICAÇÃO E FRONT-END ---
     - name: GEONODE_CLIENT_LAYER_PREVIEW_LIBRARY
       value: "mapstore"
-    # Habilita a criação de Dashboards e GeoStories (Substitui StoryMaps)
     - name: ENABLE_MAPSTORE_APPS
       value: "true"
 
     # --- Fila Assíncrona ---
     - name: CELERY_BROKER_URL
       value: "redis://geonode-redis-master:6379/0"
+
+    # ====================================================================
+    # GESTÃO DE IDENTIDADE E ACESSO (IAM)
+    # Instrução: Descomente apenas O BLOCO A ou O BLOCO B conforme a
+    # diretriz de rede corporativa vigente.
+    # ====================================================================
+
+    # --------------------------------------------------------------------
+    # OPÇÃO A: Integração LDAP / Active Directory (On-Premise)
+    # Ideal se a autenticação primária for o servidor AD interno da rede.
+    # --------------------------------------------------------------------
+    # - name: LDAP_ENABLED
+    #   value: "True"
+    # - name: LDAP_SERVER_URL
+    #   value: "ldaps://ad.ana.gov.br:636"
+    # - name: LDAP_BIND_DN
+    #   value: "CN=Geonode Service,OU=Servicos,DC=ana,DC=gov,DC=br"
+    # - name: LDAP_BIND_PASSWORD
+    #   valueFrom:
+    #     secretKeyRef:
+    #       name: ad-credentials
+    #       key: password
+    # - name: LDAP_USER_SEARCH_DN
+    #   value: "OU=Usuarios,DC=ana,DC=gov,DC=br"
+    # - name: LDAP_USER_SEARCH_FILTER_STR
+    #   value: "(sAMAccountName=%(user)s)"
+    # - name: LDAP_GROUP_SEARCH_DN
+    #   value: "OU=Grupos,DC=ana,DC=gov,DC=br"
+    
+    # --------------------------------------------------------------------
+    # OPÇÃO B: Integração OIDC / SAML 2.0 (Cloud-Native SSO)
+    # Ideal para Microsoft Entra ID (Azure AD), Keycloak ou Gov.br.
+    # Esta é a opção recomendada para arquiteturas Zero Trust.
+    # --------------------------------------------------------------------
+    - name: OAUTH2_PROVIDER_APPLICATION_MODEL
+      value: "oauth2_provider.Application"
+    - name: SOCIALACCOUNT_PROVIDERS
+      # Exemplo formatado para Azure AD (Ajustar o tenant e chaves no Secret em Produção)
+      value: '{"openid_connect": {"APPS": [{"client_id": "geonode-oidc-client", "secret": "INJETAR_VIA_SECRET", "settings": {"server_url": "https://login.microsoftonline.com/tenant-id-da-agencia/v2.0"}}]}}'
 
 # ------------------------------------------------------------------------
 # 2. MOTOR DE MAPAS OGC (GeoServer)
@@ -101,12 +135,10 @@ geoserver:
       memory: "4Gi"
 
   env:
-    # Externaliza a configuração (Workspaces/SLDs) para o RDS via JDBC
     - name: GEOSERVER_JDBC_CONFIG
       value: "true"
     - name: GEOSERVER_DATA_DIR
       value: "/opt/geoserver_data"
-    # Tuning de JVM para cargas massivas de WMS/WFS
     - name: INITIAL_MEMORY
       value: "2G"
     - name: MAXIMUM_MEMORY
@@ -124,25 +156,22 @@ geoserver:
 
 # ------------------------------------------------------------------------
 # 3. CAMADA DE BUSINESS INTELLIGENCE AVANÇADA (Apache Superset)
-# Substitui o ArcGIS Experience Builder para Big Data e FinOps
 # ------------------------------------------------------------------------
 superset:
   enabled: true
   replicaCount: 1
   image:
-    repository: quay.io/ana-gov/apache-superset # Imagem customizada aprovada no RHACS
+    repository: quay.io/ana-gov/apache-superset
     tag: "latest"
   securityContext:
     runAsNonRoot: true
     runAsUser: 1001
   env:
-    # Conecta o BI diretamente ao PostGIS do GeoNode para leitura
     - name: SUPERSET_SQLALCHEMY_URI
       valueFrom:
         secretKeyRef:
           name: aws-rds-credentials
           key: postgis_db_url_read_only
-    # Permite embutir os dashboards do Superset via iFrame dentro do GeoNode
     - name: SUPERSET_FEATURE_EMBEDDED_SUPERSET
       value: "true"
     - name: SUPERSET_WEBSERVER_ADDRESS
@@ -165,12 +194,8 @@ redis:
 # ------------------------------------------------------------------------
 route:
   enabled: true
-  # Rota do catálogo e mapas
   hostGeoNode: "geonode.ana.gov.br"
-  # Rota exclusiva para painéis de BI avançados
   hostSuperset: "bi-espacial.ana.gov.br"
-  
   tls:
-    # O certificado SSL é resolvido na borda do cluster (Ingress Controller)
     termination: edge
     insecureEdgeTerminationPolicy: Redirect
