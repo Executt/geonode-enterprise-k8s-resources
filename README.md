@@ -13,6 +13,8 @@ Para entender profundamente o funcionamento da plataforma, consulte os documento
 3. [APIs e Rotas de Acesso](docs/api_rotas.md)
 4. [Guia de Operação Desktop (QGIS e Campo)](docs/guia_qgis.md)
 5. [Visão de Negócios e Projetos Estratégicos](docs/negocios_operacao.md)
+6. [Mapeamento de Componentes](docs/mapeamento_componentes.md)
+   
 
 ## 🚀 Como fazer o Deploy (GitOps / ArgoCD)
 
