@@ -1,0 +1,56 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: geonode-enterprise-prod
+  # O namespace onde o ArgoCD está instalado no cluster (geralmente argocd ou openshift-gitops)
+  namespace: openshift-gitops 
+  labels:
+    environment: production
+    managed-by: coopi
+    app: geonode
+spec:
+  # Opcional: Se você tiver criado um projeto específico no ArgoCD para separar os acessos, mude de 'default'
+  project: default
+  
+  source:
+    # O repositório onde os manifestos/Helm da infraestrutura residem
+    repoURL: 'https://github.com/Executt/geonode-enterprise-openshift.git'
+    targetRevision: main
+    # O diretório exato onde está o arquivo Chart.yaml
+    path: helm-chart
+    helm:
+      valueFiles:
+        - values-prod.yaml
+        
+  destination:
+    # Aponta para o próprio cluster onde o ArgoCD roda
+    server: 'https://kubernetes.default.svc'
+    # O namespace final onde o GeoNode, GeoServer e Celery vão rodar
+    namespace: geonode-system
+    
+  syncPolicy:
+    automated:
+      # Prune: Remove pods/serviços do cluster se eles forem apagados do GitHub
+      prune: true
+      # SelfHeal: Se alguém alterar algo manualmente no cluster via CLI, o ArgoCD força a reversão para o estado do Git
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+      - ApplyOutOfSyncOnly=true
+      # Evita que recursos sejam deletados em cascata se o Application for apagado acidentalmente
+      - PrunePropagationPolicy=foreground 
+    retry:
+      limit: 5
+      backoff:
+        duration: 5s
+        factor: 2
+        maxDuration: 3m
+
+  # Tuning crítico para OpenShift:
+  # O OpenShift Ingress Controller injeta automaticamente o 'host' nas Routes caso não seja especificado.
+  # Isso faz o ArgoCD achar que o cluster está fora de sincronia com o Git. O bloco abaixo ignora essa injeção.
+  ignoreDifferences:
+    - group: route.openshift.io
+      kind: Route
+      jsonPointers:
+        - /spec/host
