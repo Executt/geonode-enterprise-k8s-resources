@@ -1,0 +1,9 @@
+apiVersion: v2
+name: geonode-enterprise
+description: Um Helm Chart Cloud-Native para GeoNode no Red Hat OpenShift, otimizado para AWS (Stateless) e segurança DevSecOps.
+type: application
+version: 1.0.0
+appVersion: "4.0.x"
+maintainers:
+  - name: Coordenação de Infraestrutura e Operações (COOPI/STI/ANA)
+    email: coopi@ana.gov.br
