@@ -1,15 +1,16 @@
 # Visão de Negócios e Projetos Estratégicos
 
-A mudança arquitetônica para o GeoNode e ferramentas de código aberto (Superset, QField) não é apenas uma modernização de TI, mas uma fundação estrutural para sustentar os projetos de negócio da Agência.
+A mudança arquitetônica para o ecossistema aberto e multicloud estabelece a fundação tecnológica necessária para sustentar a escala e a complexidade dos novos projetos da Agência, integrando diretamente a COOPI às necessidades finalísticas.
 
 ## 1. Integração com o Projeto "Declara Água"
-A Prova de Conceito (PoC) que utiliza IA e visão computacional para leitura automatizada de hidrômetros gerará alto volume de dados geolocalizados.
-* **Como a IDE apoia:** As coordenadas e leituras extraídas pelos modelos de IA serão armazenadas no AWS RDS PostGIS. O **Apache Superset** (conectado à base) oferecerá dashboards em tempo real para a diretoria monitorar os volumes reportados vs. outorgados, sem impactar a performance do motor cartográfico do GeoServer.
+A leitura automatizada de hidrômetros através de modelos de visão computacional gera um volume massivo de dados de telemetria e imagens.
+* **A Dinâmica Multicloud:** Os algoritmos de IA pesados são processados na instância gerenciada do **Azure Databricks** (`adb-3109412849216067.7.azuredatabricks.net`). 
+* **O Papel da IDE:** Após a inferência da imagem, o Databricks grava as coordenadas geográficas e os volumes aferidos diretamente no AWS RDS (PostGIS). O Apache Superset consome essa base quase em tempo real, entregando dashboards táticos de outorga x consumo sem penalizar os nós de computação do OpenShift.
 
-## 2. Hidrologia Espacial Cloud-Native
-A migração histórica do acervo de "Hidrologia Espacial" do SharePoint para o AWS S3 encontra aqui seu destino final de consumo.
-* **Como a IDE apoia:** Em vez de arquivos estáticos no S3, o GeoServer (com o plugin S3 GeoTIFF) fará o streaming das camadas diretamente do bucket para a web via WMS, transformando arquivos mortos em serviços cartográficos vivos consumíveis em segundos.
+## 2. Hidrologia Espacial Cloud-Native e JupyterHub
+A migração do acervo de "Hidrologia Espacial" do SharePoint para o AWS S3 atinge seu potencial máximo ao se conectar com a equipe de ciência de dados.
+* **A Dinâmica Analítica:** Analistas acessam o **JupyterHub** (`jupyter.ana.gov.br`) e utilizam bibliotecas espaciais para requisitar as imagens COG hospedadas no S3 através dos serviços WCS/WMS do GeoNode. Análises de séries temporais de vazão e cheias são desenvolvidas em Python na infraestrutura da ANA, enquanto o GeoNode garante o catálogo e a governança do acesso via SSO.
 
 ## 3. Gestão Administrativa e FinOps-Gov
-A infraestrutura em nuvem exige monitoramento constante de custos estruturados pelo projeto "Pacto-Gov" e "FinOps-Gov".
-* **Como a IDE apoia:** O Apache Superset implantado junto ao GeoNode pode consolidar tanto os dados espaciais quanto as métricas de custeio multicloud exportadas da AWS. A consolidação desses indicadores em painéis interativos permite que a COOPI comprove o ROI (Retorno sobre Investimento) da nova plataforma open-source em comparação aos antigos licenciamentos proprietários.
+A arquitetura distribuída (AWS, Azure e clusters locais) exige rigor no acompanhamento de gastos.
+* **O Papel da IDE:** O Apache Superset orquestrado junto ao GeoNode consolida as bases espaciais e os *billing reports* processados pelos módulos do **FinOps-Gov** e **Pacto-Gov**. Essa centralização analítica permite o monitoramento preciso do custo de computação e armazenamento, comprovando o ganho de eficiência da migração em relação aos modelos de licenciamento proprietários.
