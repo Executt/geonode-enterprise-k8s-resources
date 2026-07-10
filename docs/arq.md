@@ -59,5 +59,30 @@ graph TD
     %% Conexões com o Mundo Externo (Egress e INPE)
     QGIS -- "HTTPS :443<br>(Plugin STAC API)" --> INPE
     GS -- "Tráfego Outbound<br>(WMS Cascateado / AWS S3 API)" --> NAT
+
+
+2. Fluxo Estrutural da Arquitetura (Resumo Visual Gráfico)
+Caso prefira uma visualização rápida em texto, aqui está a topologia estruturada de como os dados trafegam do analista na ANA até os servidores na AWS:
+[ ZONA 1: REDE ANA / VPN ]
+Analista (QGIS Desktop):
+Consulta catálogo do Inpe via Plugin STAC (HTTPS 443).
+Edita vetores e vê mapas do GeoNode via WFS/WMS (HTTPS 443).
+Faz queries pesadas direto no banco (TCP 5432 - via VPN restrita).
+⬇ Tráfego de Internet/VPN protegido por AWS WAF & Security Groups ⬇
+[ ZONA 2: AWS VPC - CAMADA DE ENTRADA PÚBLICA ]
+AWS ALB (Load Balancer): Recebe requisições na porta 443 (com certificado SSL), descriptografa e faz o roteamento interno.
+⬇ Tráfego roteado para instâncias isoladas (Sub-redes Privadas) ⬇
+[ ZONA 3: AWS VPC - CAMADA DE COMPUTAÇÃO (Privada) ]
+GeoNode (Django/Python): Roda internamente (Porta 8000). Gerencia usuários, interface web, permissões e envia tarefas em background para o Redis (Porta 6379).
+GeoServer: Roda internamente (Porta 8080). Renderiza as imagens, aplica estilos cartográficos e valida as permissões com o GeoNode.
+⬇ Requisição de Dados ⬇
+[ ZONA 4: AWS VPC - CAMADA DE DADOS E STORAGE (Privada) ]
+AWS RDS (PostgreSQL + PostGIS): Recebe requisições na porta 5432 do GeoNode e GeoServer. Guarda tanto o modelo de usuários quanto as geometrias vetoriais da ANA.
+AWS S3 (Bucket Interno): Armazena arquivos do site, PDFs, Shapes originais enviados por usuários e recortes raster gerados pela equipe da ANA.
+➡ Tráfego de Saída via NAT Gateway ➡
+[ ZONA 5: INTERNET E FONTES EXTERNAS ]
+AWS Open Data S3: O GeoServer busca os blocos de imagens Sentinel-2 (COGs) diretamente da infraestrutura aberta da AWS, sem baixar o arquivo inteiro.
+INPE (Brazil Data Cube): O GeoServer atua como proxy (WMS Cascateado) e busca matrizes temporais de desmatamento/uso do solo do INPE para sobrepor no portal corporativo.
+
     NAT --> INPE
     NAT --> Sentinel
