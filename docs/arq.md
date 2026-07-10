@@ -59,9 +59,11 @@ graph TD
     %% Conexões com o Mundo Externo (Egress e INPE)
     QGIS -- "HTTPS :443<br>(Plugin STAC API)" --> INPE
     GS -- "Tráfego Outbound<br>(WMS Cascateado / AWS S3 API)" --> NAT
+    NAT --> INPE
+    NAT --> Sentinel
 
 
-2. Fluxo Estrutural da Arquitetura (Resumo Visual Gráfico)
+## 2. Fluxo Estrutural da Arquitetura (Resumo Visual Gráfico)
 Caso prefira uma visualização rápida em texto, aqui está a topologia estruturada de como os dados trafegam do analista na ANA até os servidores na AWS:
 
 [ ZONA 1: REDE ANA / VPN ]
@@ -89,5 +91,40 @@ AWS S3 (Bucket Interno): Armazena arquivos do site, PDFs, Shapes originais envia
 AWS Open Data S3: O GeoServer busca os blocos de imagens Sentinel-2 (COGs) diretamente da infraestrutura aberta da AWS, sem baixar o arquivo inteiro.
 INPE (Brazil Data Cube): O GeoServer atua como proxy (WMS Cascateado) e busca matrizes temporais de desmatamento/uso do solo do INPE para sobrepor no portal corporativo.
 
-    NAT --> INPE
-    NAT --> Sentinel
+
+ ## 3. Fluxo
+[ REDE ANA / QGIS / VPN ]
+                  │
+                  │ HTTPS (443) / TCP (5432 restrito)
+                  ▼
+      [ AWS APPLICATION LOAD BALANCER ]
+                  │
+                  │
+ ┌────────────────┴─────────────────────────────────────────┐
+ │ AWS VPC (Sub-redes Privadas)                             │
+ │                                                          │
+ │      [ CAMADA DE APLICAÇÃO ]                             │
+ │       │                                                  │
+ │       ├─► GeoNode (Django - Porta 8000) ◄─────┐          │
+ │       │                                       │          │
+ │       └─► GeoServer (OGC - Porta 8080)  ◄─────┤          │
+ │                                               │          │
+ │                                               │          │
+ │      [ CAMADA DE DADOS E STORAGE ]            │          │
+ │       │                                       │          │
+ │       ├─► AWS RDS (PostgreSQL/PostGIS) ◄──────┘          │
+ │       │     (Porta 5432)                                 │
+ │       │                                                  │
+ │       └─► AWS S3 (Bucket Interno) ◄──────────────────────┤
+ │             (Imagens COG e Mídias)                       │
+ │                                                          │
+ │                                                          │
+ │      [ SAÍDA EXTERNA (EGRESS) ]                          │
+ │       │                                                  │
+ │       └─► NAT Gateway (Porta 443) ────────────────┐      │
+ └───────────────────────────────────────────────────┼──────┘
+                                                     │
+               ┌─────────────────────────────────────┴──────────┐
+               ▼                                                ▼
+   [ INPE (Brazil Data Cube) ]                   [ AWS Open Data (Sentinel-2) ]
+      (Via WMS Cascateado)                           (Via S3 GeoTIFF Plugin)
