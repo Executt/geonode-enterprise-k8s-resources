@@ -48,6 +48,9 @@ const parametros = new URLSearchParams({
     width: '800',
     height: '600'
 });
+
+---
+
 **Atenção (Performance): Evite carregar grandes volumes de dados como WFS (GeoJSON) direto no navegador do usuário. Se o objetivo é apenas visualizar a camada, utilize WMS ou WMTS. Reserve o WFS apenas para quando o usuário clicar no mapa para ver atributos específicos (GetFeatureInfo) ou precisar editar um ponto de outorga.**
 
 ### B. Para Cientistas de Dados (JupyterHub e Databricks)
