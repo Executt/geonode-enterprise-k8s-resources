@@ -1,0 +1,112 @@
+stages:
+  - sast
+  - build_and_push
+  - security_scan
+  - gitops_update
+
+variables:
+  # Quay.io Registry
+  QUAY_REGISTRY: "quay.io/ana-gov"
+  REPO_DJANGO: "geonode-django"
+  REPO_GEOSERVER: "geonode-geoserver"
+  IMAGE_TAG: $CI_COMMIT_SHORT_SHA
+
+  # Red Hat Advanced Cluster Security (RHACS)
+  ROX_API_TOKEN: $RHACS_API_TOKEN
+  ROX_CENTRAL_ADDRESS: "central.rhacs.sua-rede.gov.br:443"
+
+  # SonarQube
+  SONAR_HOST_URL: "https://sonarqube.sua-rede.gov.br"
+  SONAR_TOKEN: $SONAR_TOKEN
+
+# ==========================================
+# STAGE 1: SonarQube (Qualidade de Código)
+# ==========================================
+sonarqube_check:
+  stage: sast
+  image: 
+    name: sonarsource/sonar-scanner-cli:latest
+    entrypoint: [""]
+  script:
+    - echo "Iniciando análise estática de código com SonarQube..."
+    - sonar-scanner
+      -Dsonar.projectKey=geonode_enterprise
+      -Dsonar.sources=./src
+      -Dsonar.host.url=$SONAR_HOST_URL
+      -Dsonar.login=$SONAR_TOKEN
+  allow_failure: true # Ajuste para 'false' se quiser bloquear código ruim
+  only:
+    - main
+
+# ==========================================
+# STAGE 2: Build & Push para o Red Hat Quay
+# ==========================================
+.build_template: &build_definition
+  image: docker:24.0.5
+  services:
+    - docker:24.0.5-dind
+  before_script:
+    # Login no Red Hat Quay usando credenciais do GitLab CI
+    - echo "$QUAY_PASSWORD" | docker login quay.io -u "$QUAY_USERNAME" --password-stdin
+
+build_django_quay:
+  <<: *build_definition
+  stage: build_and_push
+  script:
+    - docker build -t $QUAY_REGISTRY/$REPO_DJANGO:$IMAGE_TAG -f docker/django/Dockerfile .
+    - docker push $QUAY_REGISTRY/$REPO_DJANGO:$IMAGE_TAG
+
+build_geoserver_quay:
+  <<: *build_definition
+  stage: build_and_push
+  script:
+    - docker build -t $QUAY_REGISTRY/$REPO_GEOSERVER:$IMAGE_TAG -f docker/geoserver/Dockerfile .
+    - docker push $QUAY_REGISTRY/$REPO_GEOSERVER:$IMAGE_TAG
+
+# ==========================================
+# STAGE 3: RHACS / StackRox (Image Scan)
+# ==========================================
+rhacs_image_scan:
+  stage: security_scan
+  image: registry.access.redhat.com/ubi8/ubi-minimal:latest
+  before_script:
+    - echo "Baixando roxctl CLI..."
+    - curl -s -k -L -H "Authorization: Bearer $ROX_API_TOKEN" https://$ROX_CENTRAL_ADDRESS/api/cli/download/roxctl-linux -o /usr/local/bin/roxctl
+    - chmod +x /usr/local/bin/roxctl
+  script:
+    - echo "Solicitando ao RHACS o scan das imagens hospedadas no Quay..."
+    
+    # 1. Verifica falhas de segurança CVE na imagem do Django
+    - roxctl image check --endpoint $ROX_CENTRAL_ADDRESS --insecure-skip-tls-verify -e $ROX_API_TOKEN --image $QUAY_REGISTRY/$REPO_DJANGO:$IMAGE_TAG
+    
+    # 2. Verifica falhas de segurança CVE na imagem do GeoServer
+    - roxctl image check --endpoint $ROX_CENTRAL_ADDRESS --insecure-skip-tls-verify -e $ROX_API_TOKEN --image $QUAY_REGISTRY/$REPO_GEOSERVER:$IMAGE_TAG
+  
+  only:
+    - main
+
+# ==========================================
+# STAGE 4: Atualização GitOps (ArgoCD)
+# ==========================================
+update_argocd_manifests:
+  stage: gitops_update
+  image: alpine/git:latest
+  before_script:
+    - apk add --no-cache yq
+    - git config --global user.email "gitlab-ci-bot@ana.gov.br"
+    - git config --global user.name "GitLab CI Bot"
+  script:
+    - echo "Clonando repositório de infraestrutura K8s..."
+    - git clone https://oauth2:${GITOPS_REPO_TOKEN}@gitlab.sua-rede.gov.br/infra/geonode-openshift-helm.git
+    - cd geonode-openshift-helm
+    
+    - echo "Apontando as imagens para o novo build no Quay.io..."
+    - yq e -i ".django.image.repository = \"$QUAY_REGISTRY/$REPO_DJANGO\"" values-prod.yaml
+    - yq e -i ".django.image.tag = \"$IMAGE_TAG\"" values-prod.yaml
+    - yq e -i ".geoserver.image.repository = \"$QUAY_REGISTRY/$REPO_GEOSERVER\"" values-prod.yaml
+    - yq e -i ".geoserver.image.tag = \"$IMAGE_TAG\"" values-prod.yaml
+    
+    - git commit -am "chore(sec): Atualiza imagens do GeoNode após aprovação do RHACS (Tag $IMAGE_TAG)"
+    - git push origin main
+  only:
+    - main
