@@ -89,6 +89,8 @@ Para editar dados diretamente no banco a partir do QGIS (quando a conexão nativ
 
 Ponto Crítico: Nas configurações de qualquer conexão WFS no QGIS, marque a opção "Ativar paginação de feições" e defina um limite seguro (ex: 2000). Tentar baixar 1 milhão de pontos de uma vez sem paginação causará um erro de Timeout no Application Load Balancer da AWS e o travamento do QGIS.
 
+---
+
 ## 3. Segurança e Interação com a API REST do GeoNode
 É importante não confundir a "ArcGIS REST API" com a API REST do GeoNode.
 
